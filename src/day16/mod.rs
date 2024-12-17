@@ -5,7 +5,7 @@ pub fn solve() -> (u32, u32) {
     let mut map = Vec::new();
     let mut start = (0, 0);
     let mut end = (0, 0);
-    for (i, line) in input.flatten().enumerate() {
+    for (i, line) in input.map_while(Result::ok).enumerate() {
         let mut row = Vec::new();
         for (j, c) in line.chars().enumerate() {
             match c {
@@ -25,57 +25,85 @@ pub fn solve() -> (u32, u32) {
         map.push(row);
     }
 
-    let mut cache = vec![vec![None; map[0].len()]; map.len()];
+    let og_map = map.clone();
 
-    let best = find_min_score(&mut map, start, end, &mut cache, (0, 1)).unwrap();
-    (best as u32, 0)
-}
+    let dirs = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
-fn find_min_score(
-    map: &mut Vec<Vec<bool>>,
-    start: (usize, usize),
-    end: (usize, usize),
-    cache: &mut Vec<Vec<Option<((i32, i32), usize)>>>,
-    prev_dir: (i32, i32),
-) -> Option<usize> {
-    if start == end {
-        return Some(0);
+    let mut dist = vec![vec![vec![usize::MAX; 4]; map[0].len()]; map.len()];
+    let mut queue = std::collections::VecDeque::new();
+    for i in 0..4 {
+        dist[start.0][start.1][i] = 0;
     }
-    if let Some((dir, score)) = &cache[start.0][start.1] {
-        if *dir == prev_dir {
-            //return Some(*score);
-        }
-        //return Some(*score + 1000);
-    }
-    map[start.0][start.1] = true;
-    let mut turn = prev_dir;
-    let mut cache_best = usize::MAX;
-    let mut best = usize::MAX;
-    for (i, j) in [(-1, 0), (1, 0), (0, -1), (0, 1)].iter() {
-        let new_pos = ((start.0 as i32 + i) as usize, (start.1 as i32 + j) as usize);
-        if map[new_pos.0][new_pos.1] {
+    queue.push_back((start.0, start.1, 0, 0));
+    while let Some((x, y, d, dir)) = queue.pop_front() {
+        if (x, y) == end {
             continue;
         }
-        let new_score = if (*i, *j) == prev_dir { 1 } else { 1001 };
-        let next_best = find_min_score(map, new_pos, end, cache, (*i, *j));
-        if next_best.is_none() {
-            continue;
-        }
-        if new_score + next_best.unwrap() < best {
-            best = new_score + next_best.unwrap();
-            if new_score == 1001 {
-                turn = (*i, *j);
-                cache_best = best - 1000;
+
+        map[x][y] = true;
+
+        for ndir in 0..4 {
+            let nx = x as i32 + dirs[ndir].0;
+            let ny = y as i32 + dirs[ndir].1;
+            if og_map[nx as usize][ny as usize] {
+                continue;
+            }
+            let nd = d + if dir == ndir { 1 } else { 1001 };
+            if nd >= dist[nx as usize][ny as usize][ndir] {
+                continue;
+            }
+            if ndir == dir {
+                queue.push_front((nx as usize, ny as usize, nd, ndir));
             } else {
-                turn = prev_dir;
-                cache_best = best;
+                queue.push_back((nx as usize, ny as usize, nd, ndir));
+            }
+            dist[nx as usize][ny as usize][ndir] = nd.min(dist[nx as usize][ny as usize][ndir]);
+        }
+    }
+
+    let mut on_best = vec![vec![vec![false; 4]; map[0].len()]; map.len()];
+    let mut min = 0;
+    for i in 0..4 {
+        if dist[end.0][end.1][i] < dist[end.0][end.1][min] {
+            min = i;
+        }
+    }
+    let mut stack = vec![(end.0, end.1, min)];
+
+    while let Some((x, y, dir)) = stack.pop() {
+        if on_best[x][y][dir] {
+            continue;
+        }
+        on_best[x][y][dir] = true;
+        if (x, y) == start {
+            continue;
+        }
+        let nx = x as i32 - dirs[dir].0;
+        let ny = y as i32 - dirs[dir].1;
+        if og_map[nx as usize][ny as usize] {
+            continue;
+        }
+        for ndir in 0..4 {
+            if dist[nx as usize][ny as usize][ndir] == usize::MAX {
+                continue;
+            }
+            let nd = dist[x][y][dir] as isize - if dir == ndir { 1 } else { 1001 };
+            if nd < 0 {
+                continue;
+            }
+            if dist[nx as usize][ny as usize][ndir] == nd as usize {
+                stack.push((nx as usize, ny as usize, ndir));
             }
         }
     }
-    map[start.0][start.1] = false;
-    if best == usize::MAX {
-        return None;
-    }
-    cache[start.0][start.1] = Some((turn, cache_best));
-    Some(best)
+
+    let num = on_best
+        .iter()
+        .flatten()
+        .filter(|&x| x.contains(&true))
+        .count();
+
+    let ans = dist[end.0][end.1].iter().min().unwrap();
+
+    (*ans as u32, num as u32)
 }
