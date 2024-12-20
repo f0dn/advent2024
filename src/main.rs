@@ -1,8 +1,8 @@
 #![recursion_limit = "1024"]
-mod day19;
+mod day20;
 
 fn main() {
-    solve!(day19);
+    solve!(day20);
 }
 
 #[macro_export]
